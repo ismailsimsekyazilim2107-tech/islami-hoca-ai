@@ -1,43 +1,34 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI
+from pydantic import BaseModel
+from dotenv import load_dotenv
 from openai import OpenAI
-import os
+from prompt import SYSTEM_PROMPT
 
-app = Flask(__name__)
+load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI()
 
-SYSTEM_PROMPT = """
-Sen İslamiyet konusunda bilgilendirici bir yapay zekasın.
-Kur’an-ı Kerim, sahih hadisler ve genel kabul görmüş İslami kaynaklara dayanarak cevap ver.
-Fetva verme.
-Kesin hüküm içeren ifadeler kullanma.
-Nazik, sade ve anlaşılır cevaplar ver.
+app = FastAPI(title="İslami Hoca AI", version="1.0")
 
-Cevaplarının sonuna mutlaka şunu ekle:
-"Bu cevap bilgilendirme amaçlıdır. Dini konularda bir alimden destek alınmalıdır."
-"""
+class Question(BaseModel):
+    question: str
 
-@app.route("/ask", methods=["POST"])
-def ask():
-    data = request.get_json()
+@app.get("/")
+def root():
+    return {"status": "İslami Hoca AI çalışıyor"}
 
-    if not data or "question" not in data:
-        return jsonify({"error": "Soru gönderilmedi"}), 400
-
-    question = data["question"]
-
-    response = client.chat.completions.create(
+@app.post("/ask")
+async def ask_hoca(data: Question):
+    completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question}
-        ]
+            {"role": "user", "content": data.question}
+        ],
+        temperature=0.3
     )
 
-    answer = response.choices[0].message.content
-
-    return jsonify({"answer": answer})
-
-if __name__ == "__main__":
-    print("İslam AI Backend Çalışıyor...")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    return {
+        "answer": completion.choices[0].message.content,
+        "disclaimer": "Bu cevap bilgilendirme amaçlıdır. Kesin dini hüküm için ehil bir âlime danışınız."
+    }
